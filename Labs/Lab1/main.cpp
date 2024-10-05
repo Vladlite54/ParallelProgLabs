@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <chrono>
 #include <omp.h>
+#include <functional>
 
 bool isPalindrome(int num) {
     std::string str = std::to_string(num);
@@ -32,8 +33,8 @@ int findLargestPalindromeParallel(int N) {
             sum += j * j;
             if (isPalindrome(sum) && sum < N) {
 
-            #pragma omp critical
-            largestPalindrome = std::max(largestPalindrome, sum);
+                #pragma omp critical
+                largestPalindrome = std::max(largestPalindrome, sum);
 
             }
         }
@@ -42,22 +43,27 @@ int findLargestPalindromeParallel(int N) {
     return largestPalindrome;
 }
 
-int main() {
-
+void detectTime(std::function<int(int)> target, int N) {
     auto start = std::chrono::high_resolution_clock::now();
-    int result = findLargestPalindrome(60000000);
-    std::cout << "Palindrome: " << result << std::endl;
+    int result = target(N);
+    std::cout << "Palindrome: " << result;
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<float> duration = end - start;
-    std::cout << duration.count() << std::endl;
+    std::cout << " Time: " << duration.count();
+}
 
-    auto start2 = std::chrono::high_resolution_clock::now();
-    int result2 = findLargestPalindromeParallel(60000000);
-    std::cout << "Palindrome: " << result2 << std::endl;
-    auto end2 = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> duration2 = end2 - start2;
-    std::cout << duration2.count() << std::endl;
+void test() {
+    for (int i = 1000; i < 10000; i += 1000) {
+        detectTime(findLargestPalindrome, i);
+        std::cout << " | ";
+        detectTime(findLargestPalindromeParallel, i);
+        std::cout << std::endl;
+    }
+}
 
+int main() {
+
+    test();
 
     return 0;
 }
