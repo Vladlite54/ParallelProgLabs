@@ -1,5 +1,5 @@
 # VScode files
-.vscode/*
+.vscode/
 
 # Out files
 *.o
