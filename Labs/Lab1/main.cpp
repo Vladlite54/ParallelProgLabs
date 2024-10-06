@@ -5,8 +5,15 @@
 #include <functional>
 
 bool isPalindrome(int num) {
-    std::string str = std::to_string(num);
-    return std::equal(str.begin(), str.begin() + str.size() / 2, str.rbegin());
+    int reversed = 0;
+    int original = num;
+
+    while (num > 0) {
+        reversed = reversed * 10 + (num % 10);
+        num /= 10;
+    }
+
+    return original == reversed;
 }
 
 int findLargestPalindrome(int N) {
@@ -26,7 +33,7 @@ int findLargestPalindrome(int N) {
 int findLargestPalindromeParallel(int N) {
     int largestPalindrome = -1;
 
-    #pragma omp parallel for reduction(max: largestPalindrome)
+    #pragma omp parallel for reduction(max:largestPalindrome)
     for (int i = 1; i <= N; ++i) {
         int sum = 0;
         for (int j = i; sum < N; ++j) {
@@ -35,7 +42,6 @@ int findLargestPalindromeParallel(int N) {
 
                 #pragma omp critical
                 largestPalindrome = std::max(largestPalindrome, sum);
-
             }
         }
     }
@@ -53,9 +59,9 @@ void detectTime(std::function<int(int)> target, int N) {
 }
 
 void test() {
-    for (int i = 1000; i < 10000; i += 1000) {
+    for (int i = 10000000; i < 100000000; i += 10000000) {
         detectTime(findLargestPalindrome, i);
-        std::cout << " | ";
+        std::cout << "    |    ";
         detectTime(findLargestPalindromeParallel, i);
         std::cout << std::endl;
     }
