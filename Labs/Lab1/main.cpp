@@ -1,5 +1,4 @@
 #include <iostream>
-#include <algorithm>
 #include <chrono>
 #include <omp.h>
 #include <functional>

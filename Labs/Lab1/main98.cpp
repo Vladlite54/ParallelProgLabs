@@ -1,8 +1,5 @@
 #include <iostream>
-#include <algorithm>
-#include <chrono>
 #include <omp.h>
-#include <functional>
 
 bool isPalindrome(int num) {
     int reversed = 0;
