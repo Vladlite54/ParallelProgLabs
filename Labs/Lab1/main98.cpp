@@ -1,7 +1,5 @@
 #include <iostream>
-#include <chrono>
 #include <omp.h>
-#include <functional>
 
 bool isPalindrome(int num) {
     int reversed = 0;
@@ -48,13 +46,13 @@ int findLargestPalindromeParallel(int N) {
     return largestPalindrome;
 }
 
-void detectTime(std::function<int(int)> target, int N) {
-    auto start = std::chrono::high_resolution_clock::now();
-    int result = target(N);
+void detectTime(int (*target)(int), int N) {
+    double start = omp_get_wtime();
+    int result = (*target)(N);
     std::cout << "Palindrome: " << result;
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<float> duration = end - start;
-    std::cout << " Time: " << duration.count();
+    double end = omp_get_wtime();
+    double duration = end - start;
+    std::cout << " Time: " << duration;
 }
 
 void test() {
