@@ -1,9 +1,8 @@
 #include <iostream>
-#include <vector>
-#include <algorithm>
 #include <omp.h>
 #include <CL/cl.h>
 #include <CL/cl_platform.h>
+
 
 bool isPalindrome(int num) {
     std::string str = std::to_string(num);
@@ -11,17 +10,24 @@ bool isPalindrome(int num) {
     return str == reversedStr;
 }
 
-int findSmallestPalindrome(int N) {
-    int smallestPalindrome = -1; // Инициализируем переменную для хранения результата
-    for (int i = N + 1; ; ++i) { // Начинаем с N + 1
-        if (isPalindrome(i)) { // Проверяем, является ли число палиндромом
-            // Теперь проверяем, является ли оно произведением двух различных чисел
+long long findSmallestPalindrome(long long N) {
+    double start, end, duration;
+
+    start = omp_get_wtime();
+    int smallestPalindrome = -1; 
+    for (int i = N + 1; ; ++i) { 
+        if (isPalindrome(i)) { 
+            
             for (int j = 1; j * j <= i; ++j) {
                 if (i % j == 0) {
                     int otherFactor = i / j;
-                    if (j != otherFactor) { // Убедимся, что числа разные
-                        smallestPalindrome = i; // Сохраняем найденный палиндром
-                        return smallestPalindrome; // Возвращаем результат
+                    if (j != otherFactor) { 
+                        smallestPalindrome = i; 
+                        end = omp_get_wtime();
+                        duration = end - start;
+                        std::cout << "Palindrome: " << smallestPalindrome;
+                        std::cout << " Time: " << duration;
+                        return smallestPalindrome; 
                     }
                 }
             }
@@ -29,107 +35,110 @@ int findSmallestPalindrome(int N) {
     }
 }
 
-const char* kernelSrc = R"(
-__kernel void find_palindromes(__global int* results, int start, int end) {
-    int gid = get_global_id(0);
-    if (gid >= start && gid < end) {
-        int num = gid;
-        // Проверка на палиндром
-        int reversed = 0, original = num;
-        while (num > 0) {
-            reversed = reversed * 10 + num % 10;
-            num /= 10;
-        }
-        if (original == reversed) {
-            results[gid] = original;
-        } else {
-            results[gid] = -1;
-        }
+long long findSmallestPalindromeParallel(long long N) {
+    cl_platform_id platformId = NULL;
+    cl_device_id deviceId = NULL;
+    cl_context context = NULL;
+    cl_command_queue commandQueue = NULL;
+    cl_program program = NULL;
+    cl_kernel kernel = NULL;
+    cl_mem numbersBuffer = NULL;
+    cl_mem resultsBuffer = NULL;
+    size_t globalWorkSize;
+    cl_int ret;
+
+    // Get platform and device information
+    ret = clGetPlatformIDs(1, &platformId, NULL);
+    ret = clGetDeviceIDs(platformId, CL_DEVICE_TYPE_ALL, 1, &deviceId, NULL);
+    context = clCreateContext(NULL, 1, &deviceId, NULL, NULL, &ret);
+    commandQueue = clCreateCommandQueue(context, deviceId, 0, &ret);
+
+
+    //Load and build kernel
+    const char *sourceCode = 
+    "__kernel void isPalindrome(__global const unsigned long *numbers, __global int *results, const unsigned long numCount) {"
+    "   size_t gid = get_global_id(0);"
+    "   if (gid < numCount) {"
+    "       unsigned long num = numbers[gid];"
+    "       unsigned long reversedNum = 0;"
+    "       unsigned long tempNum = num;"
+    "       while (tempNum > 0) {"
+    "           reversedNum = reversedNum * 10 + tempNum % 10;"
+    "           tempNum /= 10;"
+    "       }"
+    "       results[gid] = (num == reversedNum);"
+    "   }"
+    "}";
+
+    program = clCreateProgramWithSource(context, 1, (const char **)&sourceCode, NULL, &ret);
+    ret = clBuildProgram(program, 1, &deviceId, NULL, NULL, NULL);
+    kernel = clCreateKernel(program, "isPalindrome", &ret);
+
+    unsigned long numCandidates = 10000; // Adjust as needed, this is the parallel search space
+    unsigned long *numbers = (unsigned long *)malloc(numCandidates * sizeof(unsigned long));
+    int *results = (int *)malloc(numCandidates * sizeof(int));
+    globalWorkSize = numCandidates;
+
+    // Generate candidate numbers (Sequential - can be optimized further if needed)
+    for (unsigned long i = 0; i < numCandidates; ++i) {
+        numbers[i] = N + i + 1; // Start searching from N+1
     }
-}
-)";
 
-int isProductOfDistinct(int num) {
-    for (int j = 1; j * j <= num; ++j) {
-        if (num % j == 0) {
-            int otherFactor = num / j;
-            if (j != otherFactor) {
-                return 1; // Это произведение двух разных чисел
-            }
-        }
-    }
-    return 0; // Не является
-}
+    numbersBuffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, numCandidates * sizeof(unsigned long), numbers, &ret);
+    resultsBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numCandidates * sizeof(int), NULL, &ret);
 
-int findSmallestPalindromeParallel(int N) {
-    // Инициализация OpenCL
-    cl_platform_id platform;
-    clGetPlatformIDs(1, &platform, NULL);
-    
-    cl_device_id device;
-    clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
-    
-    cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, NULL);
-    cl_command_queue queue = clCreateCommandQueue(context, device, 0, NULL);
+    //Set kernel arguments
+    ret = clSetKernelArg(kernel, 0, sizeof(numbersBuffer), (void *)&numbersBuffer);
+    ret = clSetKernelArg(kernel, 1, sizeof(resultsBuffer), (void *)&resultsBuffer);
+    ret = clSetKernelArg(kernel, 2, sizeof(numCandidates), (void *)&numCandidates);
 
-    int range = 1000; // Примерный диапазон, который можем проверить параллельно
-    int* results = (int*)malloc(sizeof(int) * range);
-    int K = N + range;
+    double start = omp_get_wtime(); //Start measuring the time
+    ret = clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &globalWorkSize, NULL, 0, NULL, NULL);
+    clFinish(commandQueue); //wait for the kernel to finish
+    double end = omp_get_wtime(); //End measuring the time
+    double duration = end - start;
     
-    cl_mem resultsBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(int) * range, NULL, NULL);
-    
-    // Создание и компиляция Kernel
-    cl_program program = clCreateProgramWithSource(context, 1, &kernelSrc, NULL, NULL);
-    clBuildProgram(program, 1, &device, NULL, NULL, NULL);
-    cl_kernel kernel = clCreateKernel(program, "find_palindromes", NULL);
-    
-    // Запуск Kernel
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &resultsBuffer);
-    clSetKernelArg(kernel, 1, sizeof(int), &N);
-    clSetKernelArg(kernel, 2, sizeof(int), &K);
 
-    size_t globalSize = range;
-    clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &globalSize, NULL, 0, NULL, NULL);
-    
-    // Считывание результатов
-    clEnqueueReadBuffer(queue, resultsBuffer, CL_TRUE, 0, sizeof(int) * range, results, 0, NULL, NULL);
-    
-    // Поиск самого маленького палиндрома
-    int smallestPalindrome = -1;
-    for (int i = 0; i < range; i++) {
-        if (results[i] != -1 && results[i] > N) {
-            if (isProductOfDistinct(results[i])) {
-                smallestPalindrome = results[i];
+
+    ret = clEnqueueReadBuffer(commandQueue, resultsBuffer, CL_TRUE, 0, numCandidates * sizeof(int), results, 0, NULL, NULL);
+
+    unsigned long smallestPalindrome = 0;
+    for (unsigned long i = 0; i < numCandidates; ++i) {
+      if(results[i]){
+        unsigned long num = numbers[i];
+        // Check if it's a product of two different numbers.  (Sequential part)
+        for (unsigned long j = 2; j * j <= num; ++j) {
+            if (num % j == 0 && num / j != j && num/j !=num) {
+                smallestPalindrome = num;
                 break;
             }
         }
+        if (smallestPalindrome > 0) break;
+      }
     }
 
-    // Освобождение ресурсов
+    //Clean up OpenCL resources
+    clReleaseMemObject(numbersBuffer);
     clReleaseMemObject(resultsBuffer);
     clReleaseProgram(program);
     clReleaseKernel(kernel);
-    clReleaseCommandQueue(queue);
+    clReleaseCommandQueue(commandQueue);
     clReleaseContext(context);
+
+    free(numbers);
     free(results);
 
+    std::cout << "Palindrome: " << smallestPalindrome;
+    std::cout << " Time: " << duration;
     return smallestPalindrome;
 }
 
-void detectTime(int (*target)(int), int N) {
-    double start = omp_get_wtime();
-    int result = (*target)(N);
-    std::cout << "Palindrome: " << result;
-    double end = omp_get_wtime();
-    double duration = end - start;
-    std::cout << " Time: " << duration;
-}
 
 void test() {
-    for (int i = 1000; i < 10000; i += 1000) {
-        detectTime(findSmallestPalindrome, i);
+    for (long long i = 4194304; i < 41943040; i += 4194304) {
+        findSmallestPalindrome(i);
         std::cout << "    |    ";
-        detectTime(findSmallestPalindromeParallel, i);
+        findSmallestPalindromeParallel(i);
         std::cout << std::endl;
     }
 }
