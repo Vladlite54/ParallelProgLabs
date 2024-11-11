@@ -47,14 +47,14 @@ long long findSmallestPalindromeParallel(long long N) {
     size_t globalWorkSize;
     cl_int ret;
 
-    // Get platform and device information
+    
     ret = clGetPlatformIDs(1, &platformId, NULL);
     ret = clGetDeviceIDs(platformId, CL_DEVICE_TYPE_ALL, 1, &deviceId, NULL);
     context = clCreateContext(NULL, 1, &deviceId, NULL, NULL, &ret);
     commandQueue = clCreateCommandQueue(context, deviceId, 0, &ret);
 
 
-    //Load and build kernel
+    
     const char *sourceCode = 
     "__kernel void isPalindrome(__global const unsigned long *numbers, __global int *results, const unsigned long numCount) {"
     "   size_t gid = get_global_id(0);"
@@ -74,28 +74,28 @@ long long findSmallestPalindromeParallel(long long N) {
     ret = clBuildProgram(program, 1, &deviceId, NULL, NULL, NULL);
     kernel = clCreateKernel(program, "isPalindrome", &ret);
 
-    unsigned long numCandidates = 10000; // Adjust as needed, this is the parallel search space
+    unsigned long numCandidates = 10000; 
     unsigned long *numbers = (unsigned long *)malloc(numCandidates * sizeof(unsigned long));
     int *results = (int *)malloc(numCandidates * sizeof(int));
     globalWorkSize = numCandidates;
 
-    // Generate candidate numbers (Sequential - can be optimized further if needed)
+    
     for (unsigned long i = 0; i < numCandidates; ++i) {
-        numbers[i] = N + i + 1; // Start searching from N+1
+        numbers[i] = N + i + 1; 
     }
 
     numbersBuffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, numCandidates * sizeof(unsigned long), numbers, &ret);
     resultsBuffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, numCandidates * sizeof(int), NULL, &ret);
 
-    //Set kernel arguments
+    
     ret = clSetKernelArg(kernel, 0, sizeof(numbersBuffer), (void *)&numbersBuffer);
     ret = clSetKernelArg(kernel, 1, sizeof(resultsBuffer), (void *)&resultsBuffer);
     ret = clSetKernelArg(kernel, 2, sizeof(numCandidates), (void *)&numCandidates);
 
-    double start = omp_get_wtime(); //Start measuring the time
+    double start = omp_get_wtime(); 
     ret = clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &globalWorkSize, NULL, 0, NULL, NULL);
-    clFinish(commandQueue); //wait for the kernel to finish
-    double end = omp_get_wtime(); //End measuring the time
+    clFinish(commandQueue); 
+    double end = omp_get_wtime(); 
     double duration = end - start;
     
 
@@ -106,7 +106,7 @@ long long findSmallestPalindromeParallel(long long N) {
     for (unsigned long i = 0; i < numCandidates; ++i) {
       if(results[i]){
         unsigned long num = numbers[i];
-        // Check if it's a product of two different numbers.  (Sequential part)
+        
         for (unsigned long j = 2; j * j <= num; ++j) {
             if (num % j == 0 && num / j != j && num/j !=num) {
                 smallestPalindrome = num;
@@ -117,7 +117,7 @@ long long findSmallestPalindromeParallel(long long N) {
       }
     }
 
-    //Clean up OpenCL resources
+    
     clReleaseMemObject(numbersBuffer);
     clReleaseMemObject(resultsBuffer);
     clReleaseProgram(program);
